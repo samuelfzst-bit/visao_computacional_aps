@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reconhecimento Facial ao Vivo</title>
+    <style>
+        body { font-family: Arial; background: #23272e; color: #fff; text-align: center; }
+        #video { border: 2px solid #2697e7; border-radius: 10px; }
+        #result { margin-top: 20px; font-size: 1.25em;}
+        #snap { background: #2697e7; color: #fff; border: none; padding: 10px 30px; border-radius: 6px; font-size: 1em; cursor: pointer; }
+        #snap:hover { background: #1d5179; }
+    </style>
+</head>
+<body>
+    <h2>Autenticação Facial ao Vivo</h2>
+    <video id="video" width="320" height="240" autoplay></video><br>
+    <button id="snap">Autenticar com Webcam</button>
+    <canvas id="canvas" width="320" height="240" style="display:none"></canvas>
+    <div id="result"></div>
+
+    <h3>Cadastro de Novo Usuário</h3>
+    <input id="nome_cad" placeholder="Nome" required>
+    <input id="nivel_cad" placeholder="Nível (1-3)" type="number" min="1" max="3" required>
+    <input id="divisao_cad" placeholder="Divisão/Departamento">
+    <input type="file" id="fileInput" accept="image/*">
+    <button id="cadSnap">Cadastrar com Webcam ou Imagem</button>
+    <div id="cadResult"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const snap = document.getElementById('snap');
+        const result = document.getElementById('result');
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => alert("Erro ao acessar a webcam: " + err));
+
+        // Autenticação ao vivo
+        snap.onclick = async function () {
+            result.innerHTML = "Processando...";
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(async function(blob) {
+                try { 
+                    let formData = new FormData();
+                    formData.append('file', blob, 'webcam.jpg');
+                    const resp = await fetch('http://localhost:8000/autenticar', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await resp.json();
+                
+                    // DEBUG: Mostra resposta pra você ver se está vindo tudo certo
+                    console.log(data);
+
+                    if(data.acesso && data.nivel_seguranca){
+                    // Passo 1: Salvando permissões e redirecionando por nível
+                    localStorage.setItem("auth_nome", data.nome);
+                    localStorage.setItem("auth_nivel", data.nivel_seguranca);
+                    const nivel = Number(data.nivel_seguranca);
+                    if(nivel === 1) {
+                        window.location.href = "painel_comum.html";
+                    } else if(nivel === 2) {
+                        window.location.href = "painel_diretoria.html";
+                    } else if(nivel === 3) {
+                        window.location.href = "painel_ministerio.html";
+                    } else {
+                        result.innerHTML = `<span style="color:#f04343;"><b>Nível inválido</b></span>`;
+                    }
+                } else {
+                    result.innerHTML = `<span style="color:#f04343;"><b>Acesso Negado</b>: ${data.msg || "Não reconhecido"}</span>`;
+                }
+
+            } catch(error){
+                result.innerHTML = `<span style="color:#f04343;"><b>Erro externo</b>: ${error}</span>`;
+            }
+        }, 'image/jpeg', 0.97);
+    };
+
+        // Cadastro de usuário 
+        document.getElementById('cadSnap').onclick = async function () {
+            const nome = document.getElementById('nome_cad').value.trim();
+            const nivel = document.getElementById('nivel_cad').value.trim();
+            const divisao = document.getElementById('divisao_cad').value.trim() || "";
+            const fileInput = document.getElementById('fileInput');
+            
+            if(!nome || !nivel) { 
+                alert('Preencha nome e nível'); 
+                return; 
+            }
+            if (!["1", "2", "3"].includes(nivel)) {
+                alert('Permitidos apenas os níveis 1, 2 ou 3!');
+                return;
+            }
+            
+            let fileToSend, fileName;
+            if (fileInput.files.length > 0) {
+                fileToSend = fileInput.files[0];
+                fileName = fileInput.files[0].name;
+            } else {
+                // Usa webcam se não for enviado arquivo
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                fileToSend = await new Promise(resolve => 
+                    canvas.toBlob(resolve, 'image/jpeg', 0.97)
+                );
+                fileName = "cadastro_webcam.jpg";
+            }
+            
+            let formData = new FormData();
+            formData.append('nome', nome);
+            formData.append('nivel_seguranca', nivel);
+            formData.append('division', divisao);
+            formData.append('file', fileToSend, fileName);
+                    
+            let resp = await fetch('http://localhost:8000/usuario', {
+                method: 'POST',
+                body: formData
+            });
+            let data = await resp.json();
+            if(data.id) {
+                document.getElementById('cadResult').innerHTML =
+                `<span style="color:#00ea26">Usuário cadastrado!</span> ID: ${data.id}`;
+            } else {
+                document.getElementById('cadResult').innerHTML =
+                `<span style="color:#ea0020">Erro ao cadastrar.</span>`;
+            }
+        };
+    </script>
+</body>
+</html>

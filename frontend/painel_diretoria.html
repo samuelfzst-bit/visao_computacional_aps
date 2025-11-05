@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>Diretoria</title></head>
+<body>
+  <h2>Bem-vindo, <span id="usuario"></span>!</h2>
+  <h3>Área: Diretoria</h3>
+  <button onclick="logout()">logout</button>
+  <script>
+    // Checa permissão
+    const nivel = localStorage.getItem("auth_nivel");
+    if (!nivel || nivel < 2) window.location.href = "index.html";
+    document.getElementById('usuario').innerText = localStorage.getItem("auth_nome") || 'Usuário';
+
+    function logout() {
+      localStorage.clear(); window.location.href = "index.html";
+    }
+  </script>
+</body>
+</html>
